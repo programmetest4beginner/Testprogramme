@@ -1,0 +1,30 @@
+name: Surveillance créneaux programmetest
+
+on:
+  schedule:
+    # Toutes les 20 min, 6h-16h40 UTC + 17h00 UTC, du lundi (1) au vendredi (5)
+    # Couvre 8h30-18h30 heure de Paris été comme hiver (marge pour le changement d'heure)
+    - cron: '*/20 6-16 * * 1-5'
+    - cron: '0 17 * * 1-5'
+  workflow_dispatch:  # permet de le lancer manuellement depuis GitHub, pour tester
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installer les dépendances
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Lancer la vérification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python check_creneaux.py
