@@ -28,27 +28,31 @@ def send_telegram(message: str) -> None:
 
 
 def accept_cookies_if_present(page) -> None:
-    """Ferme le bandeau de cookies RGPD s'il apparaît, y compris s'il est
-    chargé dans une iframe (sans bloquer si absent)."""
-    page.wait_for_timeout(1500)  # laisser le bandeau finir son animation d'entrée
-    print(f"Frames détectées sur la page : {[f.url for f in page.frames]}")
-    texts = ["ACCEPTER", "Tout accepter", "Accepter tout", "Accepter", "J'accepte"]
+    """Ferme le bandeau de cookies Didomi via son API JavaScript officielle
+    (plus fiable qu'un clic simulé), avec un repli sur un clic si l'API
+    n'est pas détectée."""
+    try:
+        page.wait_for_function("() => window.Didomi !== undefined", timeout=8000)
+        page.evaluate(
+            "window.Didomi.setUserAgreeToAll();"
+            "if (window.Didomi.notice) { window.Didomi.notice.hide(); }"
+        )
+        page.wait_for_timeout(1000)
+        print("Consentement cookies accepté via l'API Didomi.")
+        return
+    except PlaywrightTimeoutError:
+        print("API Didomi non détectée, tentative de fermeture par clic...")
+
+    page.wait_for_timeout(1500)
     for frame in page.frames:
-        for text in texts:
+        for text in ["ACCEPTER", "Tout accepter", "Accepter tout", "Accepter", "J'accepte"]:
             try:
-                frame.get_by_text(text, exact=False).first.click(timeout=4000)
+                frame.get_by_text(text, exact=False).first.click(timeout=4000, force=True)
                 print(f"Bandeau cookies fermé via '{text}' (frame : {frame.url})")
                 return
             except PlaywrightTimeoutError:
                 continue
-    # Dernier recours : clic forcé (ignore les vérifications de visibilité/superposition)
-    try:
-        page.get_by_text("ACCEPTER", exact=False).first.click(timeout=3000, force=True)
-        print("Bandeau cookies fermé via clic forcé sur 'ACCEPTER'")
-        return
-    except PlaywrightTimeoutError:
-        pass
-    print("Aucun bandeau de cookies détecté dans aucune frame (ou déjà fermé).")
+    print("Aucun bandeau de cookies fermé (API absente et clic infructueux).")
 
 
 def click_text(page, text: str, exact: bool = False, timeout: int = 15000) -> None:
