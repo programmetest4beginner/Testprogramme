@@ -28,15 +28,27 @@ def send_telegram(message: str) -> None:
 
 
 def accept_cookies_if_present(page) -> None:
-    """Ferme le bandeau de cookies RGPD s'il apparaît (sans bloquer si absent)."""
-    for text in ["ACCEPTER", "Tout accepter", "Accepter tout", "Accepter", "J'accepte"]:
-        try:
-            page.get_by_text(text, exact=False).first.click(timeout=6000)
-            print(f"Bandeau cookies fermé via : {text}")
-            return
-        except PlaywrightTimeoutError:
-            continue
-    print("Aucun bandeau de cookies détecté (ou déjà fermé).")
+    """Ferme le bandeau de cookies RGPD s'il apparaît, y compris s'il est
+    chargé dans une iframe (sans bloquer si absent)."""
+    page.wait_for_timeout(1500)  # laisser le bandeau finir son animation d'entrée
+    print(f"Frames détectées sur la page : {[f.url for f in page.frames]}")
+    texts = ["ACCEPTER", "Tout accepter", "Accepter tout", "Accepter", "J'accepte"]
+    for frame in page.frames:
+        for text in texts:
+            try:
+                frame.get_by_text(text, exact=False).first.click(timeout=4000)
+                print(f"Bandeau cookies fermé via '{text}' (frame : {frame.url})")
+                return
+            except PlaywrightTimeoutError:
+                continue
+    # Dernier recours : clic forcé (ignore les vérifications de visibilité/superposition)
+    try:
+        page.get_by_text("ACCEPTER", exact=False).first.click(timeout=3000, force=True)
+        print("Bandeau cookies fermé via clic forcé sur 'ACCEPTER'")
+        return
+    except PlaywrightTimeoutError:
+        pass
+    print("Aucun bandeau de cookies détecté dans aucune frame (ou déjà fermé).")
 
 
 def click_text(page, text: str, exact: bool = False, timeout: int = 15000) -> None:
