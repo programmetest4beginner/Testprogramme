@@ -29,14 +29,25 @@ def send_telegram(message: str) -> None:
 
 def accept_cookies_if_present(page) -> None:
     """Ferme le bandeau de cookies RGPD s'il apparaît (sans bloquer si absent)."""
-    for text in ["Tout accepter", "Accepter tout", "Accepter", "J'accepte"]:
+    for text in ["ACCEPTER", "Tout accepter", "Accepter tout", "Accepter", "J'accepte"]:
         try:
-            page.get_by_text(text, exact=False).first.click(timeout=3000)
+            page.get_by_text(text, exact=False).first.click(timeout=6000)
             print(f"Bandeau cookies fermé via : {text}")
             return
         except PlaywrightTimeoutError:
             continue
     print("Aucun bandeau de cookies détecté (ou déjà fermé).")
+
+
+def click_text(page, text: str, exact: bool = False, timeout: int = 15000) -> None:
+    """Clique sur un texte donné ; si ça échoue, retente après avoir fermé un
+    éventuel bandeau de cookies apparu entre-temps."""
+    try:
+        page.get_by_text(text, exact=exact).first.click(timeout=timeout)
+    except PlaywrightTimeoutError:
+        print(f"Clic sur '{text}' a échoué au premier essai, nouvelle tentative après fermeture d'un éventuel bandeau...")
+        accept_cookies_if_present(page)
+        page.get_by_text(text, exact=exact).first.click(timeout=timeout)
 
 
 def check_creneaux() -> None:
@@ -61,10 +72,10 @@ def check_creneaux() -> None:
             accept_cookies_if_present(page)
 
             # 1. Motif
-            page.get_by_text("Consultation de dermatologie", exact=False).first.click(timeout=15000)
+            click_text(page, "Consultation de dermatologie")
 
             # 2. Soignant
-            page.get_by_text("Je n'ai pas de préférence", exact=False).first.click(timeout=15000)
+            click_text(page, "Je n'ai pas de préférence")
 
             page.wait_for_timeout(2000)  # laisser la page finir de charger
             page_text = page.content()
