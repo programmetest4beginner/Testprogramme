@@ -1,27 +1,22 @@
-"""
-Surveillance des créneaux de rendez-vous Doctolib pour le cabinet NORDERM.
-
-Ce script reproduit le parcours manuel de prise de rendez-vous jusqu'à la
-dernière étape, sans jamais réserver quoi que ce soit et sans jamais se
-connecter à un compte Doctolib (parcours "invité"). Si le texte
-"Aucune disponibilité en ligne" n'apparaît plus, un créneau est probablement
-disponible : une notification Telegram est envoyée.
-
-Ne fait AUCUNE réservation automatique. Ne contourne aucune protection
-(CAPTCHA, limitation de fréquence) : si le site bloque ou change de
-structure, le script échoue simplement et prévient au lieu d'insister.
-"""
-
 import os
 import requests
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-DOCTOLIB_URL = "https://www.doctolib.fr/cabinet-medical/lambersart/norderm"
+DOCTOLIB_URL = (
+    "https://www.doctolib.fr/cabinet-medical/lambersart/norderm/booking/availabilities"
+    "?specialityId=6&telehealth=false&placeId=practice-570485&isNewPatient=true"
+    "&isNewPatientBlocked=false&motiveCategoryIds%5B%5D=325151"
+    "&motiveIds%5B%5D=11853301&practitionerId=NO_PREFERENCE"
+    "&profile_skipped=false&source=profile"
+)
 NO_SLOT_TEXT = "Aucune disponibilité en ligne"
 
 # Récupérés depuis les secrets GitHub (jamais écrits en dur dans le code)
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
+
+SCREENSHOT_PATH = "error.png"
 
 
 def send_telegram(message: str) -> None:
@@ -32,26 +27,43 @@ def send_telegram(message: str) -> None:
         print(f"Erreur d'envoi Telegram : {e}")
 
 
+def accept_cookies_if_present(page) -> None:
+    """Ferme le bandeau de cookies RGPD s'il apparaît (sans bloquer si absent)."""
+    for text in ["Tout accepter", "Accepter tout", "Accepter", "J'accepte"]:
+        try:
+            page.get_by_text(text, exact=False).first.click(timeout=3000)
+            print(f"Bandeau cookies fermé via : {text}")
+            return
+        except PlaywrightTimeoutError:
+            continue
+    print("Aucun bandeau de cookies détecté (ou déjà fermé).")
+
+
 def check_creneaux() -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        # Émule un téléphone Android, pour reproduire la mise en page vue manuellement
+        context = browser.new_context(
+            viewport={"width": 412, "height": 915},
+            user_agent=(
+                "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
+            ),
+            locale="fr-FR",
+            is_mobile=True,
+            has_touch=True,
+        )
+        page = context.new_page()
         try:
             page.goto(DOCTOLIB_URL, timeout=30000)
+            page.wait_for_load_state("networkidle", timeout=15000)
 
-            # 1. "PRENDRE RENDEZ-VOUS"
-            page.get_by_text("PRENDRE RENDEZ-VOUS", exact=False).first.click(timeout=15000)
+            accept_cookies_if_present(page)
 
-            # 2. "Avez-vous déjà consulté un soignant de cet établissement ?" -> Non
-            page.get_by_text("Non", exact=True).first.click(timeout=15000)
-
-            # 3. Catégorie
-            page.get_by_text("CONSULTATION", exact=True).first.click(timeout=15000)
-
-            # 4. Motif
+            # 1. Motif
             page.get_by_text("Consultation de dermatologie", exact=False).first.click(timeout=15000)
 
-            # 5. Soignant
+            # 2. Soignant
             page.get_by_text("Je n'ai pas de préférence", exact=False).first.click(timeout=15000)
 
             page.wait_for_timeout(2000)  # laisser la page finir de charger
@@ -67,10 +79,15 @@ def check_creneaux() -> None:
                 )
         except PlaywrightTimeoutError as e:
             print(f"Timeout pendant le parcours : {e}")
+            try:
+                page.screenshot(path=SCREENSHOT_PATH, full_page=True)
+                print(f"Capture d'écran enregistrée : {SCREENSHOT_PATH}")
+            except Exception as screenshot_error:
+                print(f"Impossible de prendre une capture : {screenshot_error}")
             send_telegram(
                 "⚠️ Le script de surveillance NORDERM a rencontré une erreur "
-                "(Doctolib a peut-être changé sa page). Vérifie manuellement "
-                "et préviens-moi si ça persiste."
+                "(Doctolib a peut-être changé sa page). Une capture d'écran "
+                "est disponible dans l'onglet Artifacts du run GitHub Actions."
             )
         finally:
             browser.close()
