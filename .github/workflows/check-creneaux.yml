@@ -1,4 +1,4 @@
-name: Surveillance créneaux programmetest
+name: Surveillance créneaux NORDERM
 
 on:
   schedule:
@@ -28,3 +28,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python check_creneaux.py
+
+      - name: Sauvegarder la capture d'écran (si erreur)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-erreur
+          path: error.png
+          if-no-files-found: ignore
+          retention-days: 5
