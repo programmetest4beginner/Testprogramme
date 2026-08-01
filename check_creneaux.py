@@ -98,6 +98,9 @@ def check_creneaux() -> None:
 
             if NO_SLOT_TEXT in page_text:
                 print("Aucun créneau disponible.")
+                send_telegram(
+                    "pas de créneau dispo"
+                )
             else:
                 print("Un créneau semble disponible !")
                 send_telegram(
