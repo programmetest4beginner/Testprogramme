@@ -2,11 +2,9 @@ name: Surveillance créneaux NORDERM
 
 on:
   schedule:
-    # Toutes les 20 min, 6h-8h UTC+2, du lundi (1) au vendredi (5)
-    # ⚠️ À décaler d'1h (5h-7h UTC) lors du passage à l'heure d'hiver (CET, UTC+1)
-  - cron: '*/20 4-5 * * 1-5'
-  - cron: '0 6 * * 1-5'
-  workflow_dispatch:  # permet de le lancer manuellement depuis GitHub, pour tester
+  - cron: '30 4 * * 1-5'
+  - cron: '0 5 * * 1-5'
+workflow_dispatch:
 
 jobs:
   check:
